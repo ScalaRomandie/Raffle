@@ -24,7 +24,7 @@ object Raffle extends App {
 
   val rsvpsTask = {
     val eventId = "234061340"
-    val target = (Uri.uri("http://api.meetup.com/Scala-Romandie/events/") / eventId / "rsvps")
+    val target = (Uri.uri("https://api.meetup.com/Scala-Romandie/events/") / eventId / "rsvps")
       .withQueryParam("key", apiKey)
     client.expect(target)(jsonOf[List[RSVP]])
   }
