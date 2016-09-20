@@ -1,5 +1,7 @@
 package org.scalaromandie
 
+import java.security.SecureRandom
+
 import io.circe.generic.auto._
 import org.http4s.Uri
 import org.http4s.circe._
@@ -29,7 +31,7 @@ object Raffle extends App {
 
   val rsvps = rsvpsTask.run
   val winners =
-    Random.shuffle(rsvps)
+     new Random(new SecureRandom()).shuffle(rsvps)
       .filter(a => a.response == "yes" && a.member.role.isEmpty) /* role is empty for regular members, only present for Organisational roles */
       .take(2)
       .map(_.member.name)
