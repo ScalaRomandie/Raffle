@@ -8,6 +8,11 @@ import org.http4s.circe._
 import org.http4s.client.blaze.defaultClient
 
 import scala.util.Random
+import scalaz._
+import Scalaz._
+
+import scalaz.concurrent.Task
+
 
 /**
   * Select the winner of the Raffle using the meetup api
@@ -16,30 +21,35 @@ import scala.util.Random
 object Raffle extends App {
 
   case class Member(name: String, role: Option[String])
+
   case class RSVP(member: Member, response: String)
 
-  Option(System.getProperty("apikey")) match {
-    case None => println("An api is required")
 
-    case Some(apiKey) =>
+  (readParam("apikey") |@| readParam("eventid")) (_ -> _)
+  match {
+
+    case Failure(f) => f.foreach(println(_))
+
+    case Success(params) =>
+      val (apiKey, eventId) = params
       val client = defaultClient
       val rsvpsTask = {
-        val eventId = "239576171"
         val target = (Uri.uri("https://api.meetup.com/Scala-Romandie/events/") / eventId / "rsvps")
           .withQueryParam("key", apiKey)
         client.expect(target)(jsonOf[List[RSVP]])
+      }.map { rsvps =>
+          new Random(new SecureRandom())
+            .shuffle(rsvps)
+            .filter(a => a.response == "yes" && a.member.role.isEmpty) /* role is empty for regular members, only present for Organisational roles */
+            .take(1)
+            .map(_.member.name)
+            .foreach(println(_))
       }
+        .onFinish(_ => Task(client.shutdownNow()))
 
-      val rsvps = rsvpsTask.run
-      val winners =
-        new Random(new SecureRandom()).shuffle(rsvps)
-          .filter(a => a.response == "yes" && a.member.role.isEmpty) /* role is empty for regular members, only present for Organisational roles */
-          .take(1)
-          .map(_.member.name)
-          .mkString("\n")
-
-      println(winners)
-
-      client.shutdownNow()
+      rsvpsTask.run
   }
+
+  def readParam(paramName: String): ValidationNel[String, String] =
+    Option(System.getProperty(paramName)).toSuccessNel(s"Missing parameter $paramName")
 }
