@@ -21,29 +21,33 @@ object Raffle extends App {
   case class Member(name: String, role: Option[String])
   case class RSVP(member: Member, response: String)
   case class Params(apiKey: String, eventId: String)
-  val random = new Random(new SecureRandom())
 
-  readParams() match {
+  val fetchAttendeesAndDrawWinnerIO = readParams() match {
     case Valid(params) =>
       val url =
         (Uri.uri("https://api.meetup.com/Scala-Romandie/events/") / params.eventId / "rsvps")
           .withQueryParam("key", params.apiKey)
 
-      Http1Client[IO]()
-        .flatMap(_.expect(url)(jsonOf[IO, List[RSVP]]))
-        .map { rsvps =>
-          val candidates =
-            random
-              .shuffle(rsvps)
-              .filter(a => a.response == "yes" && a.member.role.isEmpty) /* role is empty for regular members, only present for Organisational roles */
-              .map(_.member.name)
+      for {
+        client <- Http1Client[IO]()
+        rsvps <- client.expect(url)(jsonOf[IO, List[RSVP]])
+        winner <- IO.pure(drawWinner(rsvps))
+        _ <- IO { winner.foreach(println(_)) }
+      } yield ()
 
-          candidates.take(1).map("* " + _) ::: candidates.drop(1)
-        }
-        .map(_.foreach(println(_)))
-        .unsafeRunSync
+    case Invalid(f) => IO { f.toList.foreach(println(_)) }
+  }
 
-    case Invalid(f) => f.toList.foreach(println(_))
+  val random = new Random(new SecureRandom())
+
+  def drawWinner(rsvps: List[RSVP]): List[String] = {
+    val candidates =
+      random
+        .shuffle(rsvps)
+        .filter(a => a.response == "yes" && a.member.role.isEmpty) /* role is empty for regular members, only present for Organisational roles */
+        .map(_.member.name)
+
+    candidates.take(1).map("* " + _) ::: candidates.drop(1)
   }
 
   def readParams(): ValidatedNel[String, Params] =
@@ -51,5 +55,7 @@ object Raffle extends App {
 
   def readParam(paramName: String): ValidatedNel[String, String] =
     Option(System.getProperty(paramName))
-      .toValidNel(s"Missing parameter $paramName")
+      .toValidNel(s"Missing system property $paramName")
+
+  fetchAttendeesAndDrawWinnerIO.unsafeRunSync
 }
