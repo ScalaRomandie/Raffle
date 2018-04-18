@@ -20,15 +20,14 @@ import scala.util.Random
 object Raffle extends App {
   case class Member(name: String, role: Option[String])
   case class RSVP(member: Member, response: String)
-  case class Params(apiKey: String, eventId: String)
+  case class Params(meetupName: String, apiKey: String, eventId: String)
 
   val fetchAttendeesAndDrawWinnerIO = readParams() match {
     case Valid(params) =>
-      val url =
-        (Uri.uri("https://api.meetup.com/Scala-Romandie/events/") / params.eventId / "rsvps")
-          .withQueryParam("key", params.apiKey)
-
       for {
+        url <- IO.pure(Uri
+          .uri("https://api.meetup.com") / params.meetupName / "events" / params.eventId / "rsvps"
+          withQueryParam ("key", params.apiKey))
         client <- Http1Client[IO]()
         rsvps <- client.expect(url)(jsonOf[IO, List[RSVP]])
         winner <- IO.pure(drawWinner(rsvps))
@@ -51,7 +50,9 @@ object Raffle extends App {
   }
 
   def readParams(): ValidatedNel[String, Params] =
-    (readParam("apikey"), readParam("eventid")) mapN (Params.apply)
+    (readParam("meetup").recover { case _ => "Scala-Romandie" },
+     readParam("apikey"),
+     readParam("eventid")) mapN (Params.apply)
 
   def readParam(paramName: String): ValidatedNel[String, String] =
     Option(System.getProperty(paramName))
